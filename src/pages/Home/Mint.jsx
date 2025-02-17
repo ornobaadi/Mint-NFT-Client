@@ -1,32 +1,32 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FaCube } from 'react-icons/fa';
 import { useAccount, useContractWrite, usePublicClient } from 'wagmi';
 import { toast } from 'react-toastify';
-import { readContract } from '@wagmi/core';
+import { useConfig } from 'wagmi';
 import MintSuccess from './MintSuccess';
 
+const CONTRACT_ADDRESS = '0x743f49311a82fe72eb474c44e78da2a6e0ae951c';
 const CONTRACT_ABI = [
-    {
-        "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }],
-        "name": "checkId",
-        "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
-        "stateMutability": "view",
-        "type": "function"
-    },
     {
         "inputs": [
             { "internalType": "uint256", "name": "tokenId", "type": "uint256" },
             { "internalType": "string", "name": "metadataUrl", "type": "string" }
         ],
         "name": "mint",
-        "outputs": [],
+        "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
         "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }],
+        "name": "checkId",
+        "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+        "stateMutability": "view",
         "type": "function"
     }
 ];
 
-const CONTRACT_ADDRESS = '0x743f49311a82fe72eb474c44e78da2a6e0ae951c';
-const BASE_URL = 'http://localhost:5000/api/nft';
+const API_BASE_URL = 'https://mint-nft-server.vercel.app/api/nft';
 
 const Mint = () => {
     const [formData, setFormData] = useState({
@@ -38,14 +38,32 @@ const Mint = () => {
     const [mintingStep, setMintingStep] = useState(0);
     const [showSuccess, setShowSuccess] = useState(false);
     const [mintedNFT, setMintedNFT] = useState(null);
+    const [currentTokenId, setCurrentTokenId] = useState(null);
+    const [errorMessage, setErrorMessage] = useState('');
 
     const { address, isConnected } = useAccount();
     const publicClient = usePublicClient();
+    const config = useConfig();
 
-    const { writeAsync: mintNFT } = useContractWrite({
+    // Use the contract write hook to prepare the transaction but don't execute it immediately
+    const { 
+        write, 
+        data: mintData, 
+        isLoading: isMinting, 
+        isSuccess, 
+        error,
+        status
+    } = useContractWrite({
         address: CONTRACT_ADDRESS,
         abi: CONTRACT_ABI,
         functionName: 'mint',
+        onError: (error) => {
+            console.error('Contract write error:', error);
+            toast.error(`Minting failed: ${error.message || 'Unknown error'}`);
+            setErrorMessage(`Minting failed: ${error.message || 'Unknown error'}`);
+            setIsLoading(false);
+            setMintingStep(0);
+        }
     });
 
     const handleChange = (e) => {
@@ -56,17 +74,40 @@ const Mint = () => {
         }));
     };
 
-    const resetForm = () => {
-        setFormData({
-            nftName: '',
-            description: '',
-            imageUrl: ''
-        });
-        setIsLoading(false);
-        setMintingStep(0);
-        setShowSuccess(false);
-        setMintedNFT(null);
+    const handleMintSuccess = async (txHash) => {
+        try {
+            const receipt = await publicClient.waitForTransactionReceipt({ 
+                hash: txHash 
+            });
+
+            if (receipt.status === 'success' || receipt.status === 1) {
+                const response = await fetch(`${API_BASE_URL}/${currentTokenId}`);
+                const nftData = await response.json();
+                
+                if (nftData.status === 'success') {
+                    setMintedNFT(nftData.data);
+                    setShowSuccess(true);
+                    toast.success('NFT minted successfully!');
+                }
+            } else {
+                throw new Error('Transaction failed');
+            }
+        } catch (error) {
+            console.error('Error processing mint transaction:', error);
+            toast.error('Error processing mint transaction');
+            setErrorMessage('Transaction failed. Please try again.');
+        } finally {
+            setIsLoading(false);
+            setMintingStep(0);
+        }
     };
+
+    // Monitor transaction success and handle accordingly
+    useEffect(() => {
+        if (isSuccess && mintData) {
+            handleMintSuccess(mintData.hash);
+        }
+    }, [isSuccess, mintData]);
 
     const generateUniqueId = async () => {
         setMintingStep(1);
@@ -76,21 +117,19 @@ const Mint = () => {
         while (!isUnique) {
             newId = Math.floor(Math.random() * 1000000) + 1;
             try {
-                const exists = await readContract({
+                const data = await publicClient.readContract({
                     address: CONTRACT_ADDRESS,
                     abi: CONTRACT_ABI,
                     functionName: 'checkId',
                     args: [BigInt(newId)],
                 });
 
-                if (!exists) {
+                if (!data) {
                     isUnique = true;
                 }
             } catch (error) {
                 console.error('Error checking ID:', error);
-                toast.error('Error generating unique ID');
-                setIsLoading(false);
-                return null;
+                throw new Error('Failed to generate unique ID');
             }
         }
         return newId;
@@ -99,94 +138,105 @@ const Mint = () => {
     const storeNFTData = async (id) => {
         setMintingStep(2);
         try {
-            const nftData = {
-                nftId: id,
-                name: formData.nftName,
-                description: formData.description,
-                logoUrl: formData.imageUrl || 'https://via.placeholder.com/500',
-                userWalletAddress: address
-            };
-
-            const response = await fetch(`${BASE_URL}/store`, {
+            const response = await fetch(`${API_BASE_URL}/store`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(nftData)
+                credentials: 'include',
+                body: JSON.stringify({
+                    nftId: id,
+                    name: formData.nftName,
+                    description: formData.description,
+                    logoUrl: formData.imageUrl || 'https://via.placeholder.com/500',
+                    userWalletAddress: address
+                })
             });
-
+    
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                throw new Error(errorData?.message || `HTTP error! status: ${response.status}`);
+            }
+    
             const data = await response.json();
             if (data.status === 'success') {
-                toast.success('NFT data stored successfully!');
-                return nftData;
+                return data;
             } else {
                 throw new Error(data.message || 'Failed to store NFT data');
             }
         } catch (error) {
             console.error('Error storing NFT data:', error);
             toast.error('Failed to store NFT data: ' + error.message);
+            setErrorMessage('Failed to store NFT data: ' + error.message);
             throw error;
-        }
-    };
-
-    const performMint = async (id) => {
-        setMintingStep(3);
-        const metadataUrl = `${BASE_URL}/${id}`;
-
-        try {
-            const tx = await mintNFT({
-                args: [BigInt(id), metadataUrl],
-            });
-
-            const receipt = await publicClient.waitForTransactionReceipt({ hash: tx.hash });
-            
-            // After successful blockchain mint, store in database
-            const storedNFT = await storeNFTData(id);
-            if (storedNFT) {
-                setMintedNFT({
-                    ...storedNFT,
-                    metadataUrl
-                });
-                setShowSuccess(true);
-            }
-
-            return true;
-        } catch (error) {
-            console.error('Error in minting process:', error);
-            toast.error('Error during minting process: ' + error.message);
-            setIsLoading(false);
-            return false;
         }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setErrorMessage(''); // Clear any previous errors
 
         if (!isConnected) {
             toast.warning('Please connect your wallet first');
+            setErrorMessage('Please connect your wallet first');
+            return;
+        }
+
+        if (config.state.chainId !== 11155111) {
+            toast.error('Please switch to Sepolia network');
+            setErrorMessage('Please switch to Sepolia network');
             return;
         }
 
         if (!formData.nftName || !formData.description) {
             toast.warning('Name and description are required');
+            setErrorMessage('Name and description are required');
             return;
         }
 
         setIsLoading(true);
 
         try {
-            const uniqueId = await generateUniqueId();
-            if (!uniqueId) {
-                setIsLoading(false);
-                return;
-            }
+            // Generate unique ID
+            const tokenId = await generateUniqueId();
+            setCurrentTokenId(tokenId);
 
-            await performMint(uniqueId);
+            // Store NFT metadata
+            await storeNFTData(tokenId);
+
+            // Prepare metadata URL
+            const metadataUrl = `${API_BASE_URL}/${tokenId}`;
+
+            // Initiate minting transaction
+            setMintingStep(3);
+            
+            // Call the write function with proper arguments
+            // The critical part: Execute the write function from wagmi
+            write?.({
+                args: [BigInt(tokenId), metadataUrl]
+            });
+
+            // Success/error will be handled by the useEffect and onError callback
+            
         } catch (error) {
-            console.error('Error in submission process:', error);
-            toast.error('Error during minting process: ' + error.message);
+            console.error('Error in minting process:', error);
+            toast.error(`Minting failed: ${error.message}`);
+            setErrorMessage(`Minting failed: ${error.message}`);
             setIsLoading(false);
+            setMintingStep(0);
         }
+    };
+
+    const resetForm = () => {
+        setFormData({
+            nftName: '',
+            description: '',
+            imageUrl: ''
+        });
+        setShowSuccess(false);
+        setMintedNFT(null);
+        setCurrentTokenId(null);
+        setErrorMessage('');
     };
 
     if (showSuccess && mintedNFT) {
@@ -204,7 +254,17 @@ const Mint = () => {
                             </h2>
                         </div>
 
-                        {/* NFT Name */}
+                        {errorMessage && (
+                            <div className="alert alert-error shadow-lg">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>{errorMessage}</span>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="form-control">
                             <label className="label">
                                 <span className="label-text text-gray-300 font-medium">NFT Name</span>
@@ -222,7 +282,6 @@ const Mint = () => {
                             />
                         </div>
 
-                        {/* Description */}
                         <div className="form-control">
                             <label className="label">
                                 <span className="label-text text-gray-300 font-medium">Description</span>
@@ -239,7 +298,6 @@ const Mint = () => {
                             />
                         </div>
 
-                        {/* Image URL */}
                         <div className="form-control">
                             <label className="label">
                                 <span className="label-text text-gray-300">Image URL</span>
@@ -255,7 +313,6 @@ const Mint = () => {
                             />
                         </div>
 
-                        {/* Minting Status */}
                         {isLoading && (
                             <div className="mt-4">
                                 <div className="flex flex-col space-y-2 text-white">
@@ -277,14 +334,13 @@ const Mint = () => {
                             </div>
                         )}
 
-                        {/* Submit Button */}
                         <div className="form-control mt-6">
                             <button
                                 type="submit"
                                 className={`btn h-12 w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white border-none font-semibold text-lg ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                disabled={isLoading || !isConnected}
+                                disabled={isLoading || !isConnected || isMinting}
                             >
-                                {isLoading ? (
+                                {isLoading || isMinting ? (
                                     <span className="flex items-center">
                                         <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

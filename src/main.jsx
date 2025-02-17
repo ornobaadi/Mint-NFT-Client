@@ -16,36 +16,25 @@ import {
   RainbowKitProvider,
 } from '@rainbow-me/rainbowkit';
 import { http, createConfig, WagmiConfig } from 'wagmi';
-import {
-  mainnet,
-  polygon,
-  optimism,
-  arbitrum,
-  base,
-  zora,
-  sepolia
-} from 'viem/chains';
+import { sepolia } from 'viem/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const projectId = 'bcb6eed387e269ffa37e899bee166b59';
 
-// Set up wallets
+// Configure chains - focusing on Sepolia for NFT minting
+const chains = [sepolia];
+
+// Set up wallets with Sepolia as primary chain
 const { connectors } = getDefaultWallets({
   appName: 'MintNFT',
   projectId: projectId,
-  chains: [mainnet, polygon, optimism, arbitrum, base, zora, sepolia]
+  chains
 });
 
-// Create wagmi config
+// Create wagmi config with Sepolia focus
 const config = createConfig({
-  chains: [mainnet, polygon, optimism, arbitrum, base, zora, sepolia],
+  chains,
   transports: {
-    [mainnet.id]: http(),
-    [polygon.id]: http(),
-    [optimism.id]: http(),
-    [arbitrum.id]: http(),
-    [base.id]: http(),
-    [zora.id]: http(),
     [sepolia.id]: http(),
   },
   connectors,
@@ -73,7 +62,7 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <WagmiConfig config={config}>
-        <RainbowKitProvider chains={[mainnet, polygon, optimism, arbitrum, base, zora, sepolia]} modalSize="compact">
+        <RainbowKitProvider chains={chains} modalSize="compact">
           <RouterProvider router={router} />
         </RainbowKitProvider>
       </WagmiConfig>

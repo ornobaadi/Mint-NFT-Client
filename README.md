@@ -15,11 +15,12 @@ This repository contains the frontend codebase for an NFT minting application. T
 
 The frontend interacts with the following backend API routes:
 
-- **Store NFT Data**: `POST /api/nft/store`
+- **Swagger**: `POST /api-docs`
+- **Store POST NFT Data**: `/api/nft/store`
   - Stores NFT metadata in the database.
-- **Get NFT Data By ID**: `GET /api/nft/:nftId`
+- **GET NFT Data By ID**: `/api/nft/:nftId`
   - Retrieves NFT data using the NFT ID.
-- **Get NFT Gallery**: `GET /api/nft/gallery/:userWalletAddress`
+- **GET NFT Gallery**: `/api/nft/gallery/:userWalletAddress`
   - Retrieves all NFTs owned by a specific wallet address.
 
 ## Deployed Links

@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'https://mint-nft-server.vercel.app/api';
 
 /**
  * Service module for interacting with the NFT API

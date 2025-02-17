@@ -1,43 +1,82 @@
 /* eslint-disable react/prop-types */
+import { FaCheckCircle, FaExternalLinkAlt, FaRedo } from 'react-icons/fa';
 
 const MintSuccess = ({ nft, onReset }) => {
-    const handleShare = async () => {
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: nft.nftName,
-                    text: nft.description,
-                    url: nft.metadataUrl,
-                });
-            } catch (error) {
-                console.error('Error sharing:', error);
-            }
-        } else {
-            console.log('Web Share API not supported');
-        }
-    };
-
     return (
-        <div className="bg-gray-900 p-6 rounded-lg w-full max-w-md mx-auto text-white shadow-xl border border-green-500">
-            <div className="text-green-400 text-center text-xl font-bold mb-4">
-                ✔️ NFT Minted Successfully!
-            </div>
-            <img src={nft.imageUrl} alt="NFT" className="w-full h-48 object-cover rounded-md mb-3" />
-            <h2 className="text-lg font-semibold mb-2">{nft.nftName}</h2>
-            <p className="text-gray-400 mb-4">{nft.description}</p>
-            <div className="flex justify-between items-center">
-                <button
-                    className="bg-gray-700 px-4 py-2 rounded-lg hover:bg-gray-600 transition"
-                    onClick={handleShare}
-                >
-                    Share
-                </button>
-                <button
-                    className="bg-gradient-to-r from-pink-500 to-purple-600 px-4 py-2 rounded-lg hover:from-purple-600 hover:to-pink-500 transition"
-                    onClick={onReset}
-                >
-                    Mint Another
-                </button>
+        <div className="min-h-screen flex items-center justify-center p-4 bg-neutral">
+            <div className="w-full max-w-3xl">
+                <div className="card bg-opacity-10 backdrop-blur-lg border border-opacity-10 border-gray-700 shadow-2xl">
+                    <div className="card-body p-8 space-y-6">
+                        <div className="text-center space-y-4">
+                            <div className="flex justify-center">
+                                <FaCheckCircle className="text-6xl text-green-500" />
+                            </div>
+
+                            <h2 className="text-3xl font-bold text-white">
+                                NFT Minted Successfully!
+                            </h2>
+
+                            <p className="text-gray-300">
+                                Your NFT has been minted and stored on the blockchain
+                            </p>
+                        </div>
+
+                        <div className="bg-[#1C1C24] rounded-lg p-6 space-y-4">
+                            <div className="space-y-2">
+                                <p className="text-gray-400 text-sm">NFT Name</p>
+                                <p className="text-white font-semibold">{nft.name}</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <p className="text-gray-400 text-sm">Description</p>
+                                <p className="text-white">{nft.description}</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <p className="text-gray-400 text-sm">NFT ID</p>
+                                <p className="text-white font-mono">{nft.nftId}</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <p className="text-gray-400 text-sm">Owner Address</p>
+                                <p className="text-white font-mono truncate">
+                                    {nft.userWalletAddress}
+                                </p>
+                            </div>
+
+                            {nft.logoUrl && (
+                                <div className="mt-4">
+                                    <img
+                                        src={nft.logoUrl}
+                                        alt={nft.name}
+                                        className="w-full h-48 object-cover rounded-lg"
+                                        onError={(e) => {
+                                            e.target.src = 'https://via.placeholder.com/500';
+                                        }}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-4 mt-6">
+                            <button
+                                onClick={onReset}
+                                className="btn bg-[#1C1C24] text-white hover:bg-[#2C2C34] flex-1 h-12"
+                            >
+                                <FaRedo className="mr-2" /> Mint Another
+                            </button>
+
+                            <a
+                                href={nft.metadataUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white border-none flex-1 h-12"
+                            >
+                                <FaExternalLinkAlt className="mr-2" /> View Metadata
+                            </a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
