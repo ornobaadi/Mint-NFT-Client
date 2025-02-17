@@ -3,8 +3,7 @@ import { FaCube } from 'react-icons/fa';
 import { useAccount, useContractWrite, usePublicClient } from 'wagmi';
 import { toast } from 'react-toastify';
 import { readContract } from '@wagmi/core';
-import nftService from '../../services/api';
-import { sepolia } from 'viem/chains';
+import MintSuccess from './MintSuccess';
 
 const CONTRACT_ABI = [
     {
@@ -37,7 +36,8 @@ const Mint = () => {
     });
     const [isLoading, setIsLoading] = useState(false);
     const [mintingStep, setMintingStep] = useState(0);
-    const [nftId, setNftId] = useState(null);
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [mintedNFT, setMintedNFT] = useState(null);
 
     const { address, isConnected } = useAccount();
     const publicClient = usePublicClient();
@@ -64,7 +64,8 @@ const Mint = () => {
         });
         setIsLoading(false);
         setMintingStep(0);
-        setNftId(null);
+        setShowSuccess(false);
+        setMintedNFT(null);
     };
 
     const generateUniqueId = async () => {
@@ -84,7 +85,6 @@ const Mint = () => {
 
                 if (!exists) {
                     isUnique = true;
-                    setNftId(newId);
                 }
             } catch (error) {
                 console.error('Error checking ID:', error);
@@ -99,7 +99,6 @@ const Mint = () => {
     const storeNFTData = async (id) => {
         setMintingStep(2);
         try {
-            console.log('Storing NFT data for ID:', id);
             const nftData = {
                 nftId: id,
                 name: formData.nftName,
@@ -108,15 +107,20 @@ const Mint = () => {
                 userWalletAddress: address
             };
 
-            console.log('NFT Data to store:', nftData);
-            const response = await nftService.storeNFT(nftData);
-            console.log('Store NFT response:', response);
+            const response = await fetch(`${BASE_URL}/store`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(nftData)
+            });
 
-            if (response.status === 'success') {
-                toast.success('NFT data stored in database!');
-                return true;
+            const data = await response.json();
+            if (data.status === 'success') {
+                toast.success('NFT data stored successfully!');
+                return nftData;
             } else {
-                throw new Error(response.message || 'Failed to store NFT data');
+                throw new Error(data.message || 'Failed to store NFT data');
             }
         } catch (error) {
             console.error('Error storing NFT data:', error);
@@ -130,21 +134,20 @@ const Mint = () => {
         const metadataUrl = `${BASE_URL}/${id}`;
 
         try {
-            console.log('Starting mint process for ID:', id);
-
-            // Perform the blockchain mint
-            const data = await mintNFT({
+            const tx = await mintNFT({
                 args: [BigInt(id), metadataUrl],
             });
 
-            const receipt = await publicClient.waitForTransactionReceipt({ hash: data.hash });
-            console.log('Transaction receipt:', receipt);
-
+            const receipt = await publicClient.waitForTransactionReceipt({ hash: tx.hash });
+            
             // After successful blockchain mint, store in database
-            const storeResult = await storeNFTData(id);
-            if (storeResult) {
-                toast.success('NFT successfully minted and stored in database!');
-                resetForm();
+            const storedNFT = await storeNFTData(id);
+            if (storedNFT) {
+                setMintedNFT({
+                    ...storedNFT,
+                    metadataUrl
+                });
+                setShowSuccess(true);
             }
 
             return true;
@@ -172,7 +175,6 @@ const Mint = () => {
         setIsLoading(true);
 
         try {
-            console.log('Starting submission process');
             const uniqueId = await generateUniqueId();
             if (!uniqueId) {
                 setIsLoading(false);
@@ -186,6 +188,10 @@ const Mint = () => {
             setIsLoading(false);
         }
     };
+
+    if (showSuccess && mintedNFT) {
+        return <MintSuccess nft={mintedNFT} onReset={resetForm} />;
+    }
 
     return (
         <div className="intertight min-h-screen flex items-center justify-center p-4 bg-neutral">
@@ -233,7 +239,7 @@ const Mint = () => {
                             />
                         </div>
 
-                        {/* Image Upload */}
+                        {/* Image URL */}
                         <div className="form-control">
                             <label className="label">
                                 <span className="label-text text-gray-300">Image URL</span>
